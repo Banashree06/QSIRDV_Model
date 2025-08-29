@@ -1,4 +1,3 @@
-# QSIRDV_Model
 # QSIRDV Epidemiological Model
 
 ## Executive Summary
@@ -94,11 +93,11 @@ Reduced transmission through intensive vaccination campaign
 
 ### Key Metrics Summary
 
-| Scenario | Peak Infected | Peak Day | Total Deaths | Final Recovered | Final Vaccinated | R₀ (estimated) |
-|----------|--------------|----------|--------------|-----------------|------------------|----------------|
-| Baseline | 42.1 | 22 | 19.3 | 218.8 | 736.2 | ~2.6 |
-| High Transmission | 153.9 | 17 | 98.0 | 594.9 | 268.4 | ~4.2 |
-| Strong Vaccination | 10.8 | 4 | 2.8 | 32.2 | 964.7 | ~1.7 |
+| Scenario | Peak Infected | Peak Day | Total Deaths | Final Recovered | Final Vaccinated |
+|----------|--------------|----------|--------------|-----------------|------------------|
+| Baseline | 42.1 | 22 | 19.3 | 218.8 | 736.2 |
+| High Transmission | 153.9 | 17 | 98.0 | 594.9 | 268.4 |
+| Strong Vaccination | 10.8 | 4 | 2.8 | 32.2 | 964.7 |
 
 ### Key Insights
 - Vaccination reduces peak infection by 74% compared to baseline
@@ -203,12 +202,5 @@ custom_scenario = (
 
 - **Computational Requirements**: ~2GB RAM, <1 minute runtime
 - **Numerical Stability**: Guaranteed non-negative populations
-- **Scalability**: Supports populations up to 10⁹ individuals
 
-## Contributing
-
-Contributions are welcome. Please ensure:
-1. Code follows Julia style guidelines
-2. Tests pass with `julia test/runtests.jl`
-3. Documentation is updated accordingly
 
