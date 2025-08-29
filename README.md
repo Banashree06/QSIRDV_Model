@@ -1,4 +1,4 @@
-# QSIRDV Epidemiological Model
+# QSIRDV Epidemiological Model : Milestone 1 
 
 ## Executive Summary
 
