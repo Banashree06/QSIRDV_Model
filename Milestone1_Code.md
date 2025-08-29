@@ -257,9 +257,9 @@ try
     end
     
     savefig(p1, "figures/qsirdv_timeseries.png")
-    println("    ✓ Saved compartment curves")
+    println("Saved compartment curves")
 catch e
-    println("    ✗ ERROR creating time series plot: $e")
+    println("ERROR creating time series plot: $e")
 end
 
 # 2. Stacked bar chart showing compartment distribution
@@ -285,9 +285,9 @@ try
          bar_width=15)
     
     savefig(p2, "figures/qsirdv_stackedbar.png")
-    println("    ✓ Saved stacked bar chart")
+    println("Saved stacked bar chart")
 catch e
-    println("    ✗ ERROR creating stacked bar chart: $e")
+    println("ERROR creating stacked bar chart: $e")
 end
 
 # 3. Scenario comparison plot (Infected population)
@@ -314,9 +314,9 @@ try
     end
     
     savefig(p3, "figures/qsirdv_infected_comparison.png")
-    println("    ✓ Saved scenario comparison")
+    println("Saved scenario comparison")
 catch e
-    println("    ✗ ERROR creating comparison plot: $e")
+    println("ERROR creating comparison plot: $e")
 end
 
 # 4. Noisy vs Noiseless comparison
@@ -359,9 +359,9 @@ try
           linewidth=2)
     
     savefig(p4, "figures/qsirdv_noise_comparison.png")
-    println("    ✓ Saved noise comparison")
+    println("Saved noise comparison")
 catch e
-    println("    ✗ ERROR creating noise comparison plot: $e")
+    println("ERROR creating noise comparison plot: $e")
 end
 
 # Generate summary statistics
