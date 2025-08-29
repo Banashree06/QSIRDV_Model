@@ -77,7 +77,7 @@ println("Configured scenarios:")
 for (i, scenario) in enumerate(scenarios)
     β, κ, γ, γq, δ, δq, ν = scenario.params
     println("  $i. $(scenario.name): $(scenario.description)")
-    println("     β=$β, κ=$κ, γ=$γ, γq=$γq, δ=$δ, δq=$δq, ν=$ν")
+    println("β=$β, κ=$κ, γ=$γ, γq=$γq, δ=$δ, δq=$δq, ν=$ν")
 end
 
 # Task 2: Simulate trajectories over multiple scenarios
@@ -104,11 +104,11 @@ for (i, scenario) in enumerate(scenarios)
         push!(sols, sol)
         push!(datasets_noiseless, Array(sol))
         
-        println("    ✓ Simulation completed successfully")
-        println("    Final state: Q=$(round(sol[end][1], digits=2)), S=$(round(sol[end][2], digits=2)), I=$(round(sol[end][3], digits=2)), R=$(round(sol[end][4], digits=2)), D=$(round(sol[end][5], digits=2)), V=$(round(sol[end][6], digits=2))")
+        println("Simulation completed successfully")
+        println("Final state: Q=$(round(sol[end][1], digits=2)), S=$(round(sol[end][2], digits=2)), I=$(round(sol[end][3], digits=2)), R=$(round(sol[end][4], digits=2)), D=$(round(sol[end][5], digits=2)), V=$(round(sol[end][6], digits=2))")
         
     catch e
-        println("    ✗ ERROR in simulation: $e")
+        println("ERROR in simulation: $e")
         rethrow(e)
     end
 end
@@ -118,7 +118,7 @@ println("\nGenerating noisy datasets...")
 datasets_noisy = []
 
 for (i, data) in enumerate(datasets_noiseless)
-    println("  Adding noise to scenario $i: $(scenarios[i].name)")
+    println("Adding noise to scenario $i: $(scenarios[i].name)")
     
     noisy_data = copy(data)
     
@@ -156,7 +156,7 @@ println("\nExporting datasets...")
 # Create data directory if it doesn't exist
 if !isdir("data")
     mkdir("data")
-    println("  Created 'data' directory")
+    println("Created 'data' directory")
 end
 
 # Save CSV files for each scenario (noisy data)
@@ -180,7 +180,7 @@ end
 # Save noiseless data for comparison
 for (i, data) in enumerate(datasets_noiseless)
     filename = "data/qsirdv_scenario$(i)_noiseless.csv"
-    println("  Saving $filename")
+    println("Saving $filename")
     
     df = DataFrame(
         time = 0:160,
@@ -234,7 +234,7 @@ if !isdir("figures")
 end
 
 # 1. Time series plot for all compartments (baseline scenario)
-println("  Creating compartment curves...")
+println(" Creating compartment curves...")
 try
     p1 = plot(
         title="QSIRDV Model Dynamics - $(scenarios[1].name)",
