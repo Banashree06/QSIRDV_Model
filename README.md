@@ -104,14 +104,6 @@ Reduced transmission through intensive vaccination campaign
 - High transmission scenarios show 5× mortality increase
 - Early quarantine implementation critical for peak reduction
 
-## Installation and Setup
-
-### Prerequisites
-```bash
-# Install Julia 1.9 or later
-wget https://julialang-s3.julialang.org/bin/linux/x64/1.9/julia-1.9.0-linux-x86_64.tar.gz
-tar -xvzf julia-1.9.0-linux-x86_64.tar.gz
-```
 
 ### Environment Setup
 ```julia
