@@ -1,3 +1,8 @@
+# QSIRDV Model Implementation Code
+
+## Complete Julia Implementation
+
+```julia
 # qsirdv_model.jl - Milestone 1: Baseline QSIRDV & Data Generation
 # QSIRDV epidemiological model implementation with data generation and visualization
 # Generates synthetic datasets for training Neural ODEs/UDEs
@@ -367,4 +372,21 @@ peak_time = [argmax(data[3, :]) - 1 for data in datasets_noiseless]
 total_deaths = [data[5, end] for data in datasets_noiseless]
 final_recovered = [data[4, end] for data in datasets_noiseless]
 final_vaccinated = [data[6, end] for data in datasets_noiseless]
+```
 
+## Running the Code
+
+Save the above code as `qsirdv_model.jl` and execute:
+
+```bash
+julia qsirdv_model.jl
+```
+
+## Expected Output
+
+The script will generate:
+- 6 CSV files with scenario data (3 noiseless, 3 noisy)
+- 2 CSV files for train/validation split
+- 1 JLD2 bundle with all datasets
+- 4 PNG visualization files
+- Console output showing simulation progress and final statistics
