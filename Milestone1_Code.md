@@ -1,6 +1,6 @@
 # QSIRDV Model Implementation Code
 
-## Complete Julia Implementation
+## Milestone 1
 
 ```julia
 # qsirdv_model.jl - Milestone 1: Baseline QSIRDV & Data Generation
