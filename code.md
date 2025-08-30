@@ -390,480 +390,153 @@ The script will generate:
 - 2 CSV files for train/validation split
 - 1 JLD2 bundle with all datasets
 - 4 PNG visualization files
-- Console output showing simulation progress and final statistics
 
-# ============================================================================
-# Milestone 2 : NEURAL ODE FOR SIQRDV EPIDEMIC MODEL
-# ============================================================================
-# 
-# This implementation demonstrates how Neural Ordinary Differential Equations
-# can learn epidemic dynamics from data without explicit parameter knowledge.
-# The model combines deep learning with differential equations to create a
-# hybrid approach that leverages both data-driven and mechanistic modeling.
-#
-# Key Features:
-# - SIQRDV compartmental model with 6 states
-# - 3-layer neural network architecture (6→32→32→6)
-# - Two-phase optimization (ADAM + BFGS)
-# - Comprehensive checkpointing system
-# - Multiple forecasting methods
-# - Automated visualization generation
-#
-# ============================================================================
+  # Neural ODE for SIQRDV Epidemic Model - Concise Version
+# Learns epidemic dynamics using neural networks embedded in differential equations
 
 using Lux, DiffEqFlux, DifferentialEquations, Optimization, OptimizationOptimJL, OptimizationOptimisers
-using Random, Plots, ComponentArrays
-using CSV, DataFrames, Statistics
-using Dates
+using Random, Plots, ComponentArrays, CSV, DataFrames, Statistics, Dates
 
-# Set random seed for reproducibility
 Random.seed!(1234)
 rng = Random.default_rng()
 
 println("NEURAL ODE FOR SIQRDV MODEL")
 println("="^60)
-println("Started at: $(Dates.now())")
+println("Started: $(Dates.now())")
 
 # ============================================
-# SECTION 1: DATA GENERATION MODULE
+# 1. Data Generation
 # ============================================
-# This section generates synthetic epidemic data using the SIQRDV model.
-# The model simulates disease spread through 6 compartments:
-# - S: Susceptible (can catch the disease)
-# - I: Infected (actively spreading disease)
-# - Q: Quarantined (isolated infected individuals)
-# - R: Recovered (immune after recovery)
-# - D: Deaths (cumulative mortality)
-# - V: Vaccinated (protected through vaccination)
-
-println("\n1. Generating synthetic SIQRDV data...")
-
-# Initial conditions: [S, I, Q, R, D, V]
-# Start with 990 susceptible, 10 infected, rest zero
-u0 = [990.0, 10.0, 0.0, 0.0, 0.0, 0.0]
-
-# Time span: 160 days of epidemic simulation
+u0 = [990.0, 10.0, 0.0, 0.0, 0.0, 0.0]  # [S, I, Q, R, D, V]
 tspan = (0.0, 160.0)
-t = range(0, 160, length=161)  # Daily observations
+t = range(0, 160, length=161)
+p_true = [0.3, 0.05, 0.1, 0.08, 0.01, 0.005, 0.02]  # [β, κ, γ, γq, δ, δq, ν]
 
-# True parameters for data generation
-# [β, κ, γ, γq, δ, δq, ν] where:
-# β = 0.3: transmission rate (how easily disease spreads)
-# κ = 0.05: quarantine rate (isolation of infected)
-# γ = 0.1: recovery rate for infected
-# γq = 0.08: recovery rate for quarantined
-# δ = 0.01: death rate for infected
-# δq = 0.005: death rate for quarantined
-# ν = 0.02: vaccination rate
-p_true = [0.3, 0.05, 0.1, 0.08, 0.01, 0.005, 0.02]
-
-# Define SIQRDV differential equations
-# These equations govern how populations move between compartments
 function siqrdv!(du, u, p, t)
     S, I, Q, R, D, V = u
     β, κ, γ, γq, δ, δq, ν = p
-    N = S + I + Q + R + V  # Total living population (excludes D)
+    N = S + I + Q + R + V
     
-    # Differential equations describing rate of change
-    du[1] = -β * S * I / N - ν * S                    # dS/dt: Susceptible depletion
-    du[2] = β * S * I / N - (γ + δ + κ) * I          # dI/dt: Infection dynamics
-    du[3] = κ * I - (γq + δq) * Q                     # dQ/dt: Quarantine flow
-    du[4] = γ * I + γq * Q                            # dR/dt: Recovery accumulation
-    du[5] = δ * I + δq * Q                            # dD/dt: Death accumulation
-    du[6] = ν * S                                     # dV/dt: Vaccination progress
+    du[1] = -β * S * I / N - ν * S
+    du[2] = β * S * I / N - (γ + δ + κ) * I
+    du[3] = κ * I - (γq + δq) * Q
+    du[4] = γ * I + γq * Q
+    du[5] = δ * I + δq * Q
+    du[6] = ν * S
 end
 
-# Generate ground truth data by solving the ODE system
+# Generate data
 prob = ODEProblem(siqrdv!, u0, tspan, p_true)
 ode_data = Array(solve(prob, Tsit5(), saveat=t))
 
-# Split data: 75% for training, 25% for testing
-# This tests the model's ability to extrapolate beyond training data
-n_train = 121  # 75% of 161 points
-t_train = t[1:n_train]
-t_test = t[n_train+1:end]
-train_data = ode_data[:, 1:n_train]
-test_data = ode_data[:, n_train+1:end]
+# Split data (75/25)
+n_train = 121
+t_train, t_test = t[1:n_train], t[n_train+1:end]
+train_data, test_data = ode_data[:, 1:n_train], ode_data[:, n_train+1:end]
 
-println("  Generated $(size(ode_data, 2)) time points")
-println("  Training: $(n_train) points (t=0 to t=$(t_train[end]))")
-println("  Testing: $(length(t_test)) points (t=$(t_test[1]) to t=$(t_test[end]))")
+println("✓ Data: $(n_train) train, $(length(t_test)) test points")
 
 # ============================================
-# SECTION 2: NEURAL NETWORK ARCHITECTURE
+# 2. Neural Network Setup
 # ============================================
-# This section sets up the neural network that will learn the dynamics.
-# The network takes current state (6 values) and outputs derivatives (6 values).
-# Architecture: Input(6) → Hidden(32) → Hidden(32) → Output(6)
-
-println("\n2. Setting up Neural ODE architecture...")
-
-# Define 3-layer neural network
-# Layer 1: Maps 6 compartments to 32 hidden features
-# Layer 2: Processes 32 features to extract patterns
-# Layer 3: Maps 32 features back to 6 derivatives
 dudt_nn = Lux.Chain(
-    Lux.Dense(6, 32, tanh),     # Input layer with tanh activation
-    Lux.Dense(32, 32, tanh),    # Hidden layer with tanh activation
-    Lux.Dense(32, 6)            # Output layer (no activation)
+    Lux.Dense(6, 32, tanh),
+    Lux.Dense(32, 32, tanh),
+    Lux.Dense(32, 6)
 )
 
-# Initialize network parameters randomly
 p_nn, st_nn = Lux.setup(rng, dudt_nn)
-
-# Display network information
-println("  Network architecture: 6 → 32 → 32 → 6")
-println("  Activation: tanh")
-println("  Total parameters: $(sum(length, Lux.parameterlength(dudt_nn)))")
-
-# Create Neural ODE problem for training
-# This wraps the neural network in an ODE solver
 prob_train = NeuralODE(dudt_nn, (t_train[1], t_train[end]), Tsit5(), saveat=t_train)
 
-# Define prediction function
-# Takes parameters and returns predicted trajectories
-function predict_train(p)
-    Array(prob_train(u0, p, st_nn)[1])
-end
+predict_train = p -> Array(prob_train(u0, p, st_nn)[1])
 
-# Define weighted loss function
-# Emphasizes accuracy on infected (5x) and quarantined (2x) compartments
 function loss_train(p)
     pred = predict_train(p)
-    
-    # Compartment-specific weights
-    # Higher weights force model to prioritize these compartments
-    weights = [1.0, 5.0, 2.0, 1.0, 1.0, 1.0]  # [S, I, Q, R, D, V]
-    loss = 0.0
-    
-    # Calculate weighted mean squared error
-    for i in 1:6
-        compartment_loss = sum(abs2, train_data[i,:] .- pred[i,:])
-        loss += weights[i] * compartment_loss
-    end
-    
-    # Normalize by data size
-    return loss / length(train_data)
+    weights = [1.0, 5.0, 2.0, 1.0, 1.0, 1.0]  # Emphasize I and Q
+    sum(weights[i] * sum(abs2, train_data[i,:] .- pred[i,:]) for i in 1:6) / length(train_data)
 end
 
-# ============================================
-# SECTION 3: CHECKPOINT SYSTEM SETUP
-# ============================================
-# This section creates a comprehensive checkpoint system that:
-# - Saves model state every 50 iterations
-# - Tracks performance metrics over time
-# - Automatically identifies best model
-# - Enables training resumption if interrupted
-
-println("\n3. Setting up checkpoint system...")
-
-# Create DataFrame to store training history
-checkpoints_df = DataFrame(
-    epoch = Int[],
-    iteration = Int[],
-    loss = Float64[],
-    train_mse = Float64[],
-    train_mae = Float64[],
-    train_r2 = Float64[],
-    learning_rate = Float64[],
-    optimizer = String[],
-    time_elapsed = Float64[],
-    timestamp = String[]
-)
-
-# Function to calculate performance metrics
-# MSE: Mean Squared Error (average squared difference)
-# MAE: Mean Absolute Error (average absolute difference)
-# R²: Coefficient of determination (explained variance)
-function calc_metrics(true_data, pred_data)
-    mse = sum(abs2, true_data .- pred_data) / length(true_data)
-    mae = sum(abs, true_data .- pred_data) / length(true_data)
-    
-    # R² score calculation
-    ss_tot = sum(abs2, true_data .- mean(true_data))  # Total variance
-    ss_res = sum(abs2, true_data .- pred_data)        # Residual variance
-    r2 = 1 - (ss_res / ss_tot)                        # Explained variance ratio
-    
-    return mse, mae, r2
-end
-
-# Function to save checkpoint with all relevant information
-function save_checkpoint(epoch, iteration, loss, params, optimizer_name, lr, elapsed_time)
-    try
-        # Calculate current predictions and metrics
-        train_pred = predict_train(params)
-        train_mse, train_mae, train_r2 = calc_metrics(train_data, train_pred)
-        
-        # Add checkpoint to history
-        push!(checkpoints_df, (
-            epoch,
-            iteration,
-            loss,
-            train_mse,
-            train_mae,
-            train_r2,
-            lr,
-            optimizer_name,
-            elapsed_time,
-            string(Dates.now())
-        ))
-        
-        # Save to CSV file
-        CSV.write("training_checkpoints.csv", checkpoints_df)
-        
-        # Save best model if this is the lowest loss so far
-        if loss == minimum(checkpoints_df.loss)
-            best_checkpoint = DataFrame(
-                metric = ["best_epoch", "best_iteration", "best_loss", "best_train_mse", 
-                         "best_train_mae", "best_train_r2", "time_to_best"],
-                value = [epoch, iteration, loss, train_mse, train_mae, train_r2, elapsed_time]
-            )
-            CSV.write("best_checkpoint.csv", best_checkpoint)
-        end
-        
-        return true
-    catch e
-        println("    Warning: Could not save checkpoint at iteration $iteration: $e")
-        return false
-    end
-end
+println("✓ Network: 6 → 32 → 32 → 6 ($(sum(length, Lux.parameterlength(dudt_nn))) params)")
 
 # ============================================
-# SECTION 4: TRAINING PROCESS
+# 3. Training with Checkpoints
 # ============================================
-# This section implements the two-phase training strategy:
-# Phase 1: ADAM optimizer for global exploration (500 iterations)
-# Phase 2: BFGS optimizer for local refinement (200 iterations)
-
-println("\n4. Training Neural ODE with checkpointing...")
-println("  Optimization strategy: ADAM → BFGS")
-println("  Checkpoints will be saved every 50 iterations")
-
-# Initialize training tracking variables
 losses = Float64[]
-train_times = Float64[]
+checkpoints = DataFrame()
 start_time = time()
-current_epoch = 1
-checkpoint_interval = 50
 
-# Callback function called after each optimization step
-# Handles progress tracking, checkpointing, and reporting
-training_callback = function(state, l)
-    push!(losses, l)
-    push!(train_times, time() - start_time)
-    iteration = length(losses)
+function save_checkpoint(iter, loss, params, opt_name)
+    pred = predict_train(params)
+    mse = sum(abs2, train_data .- pred) / length(train_data)
+    r2 = 1 - sum(abs2, train_data .- pred) / sum(abs2, train_data .- mean(train_data))
     
-    # Save checkpoint at regular intervals
-    if iteration % checkpoint_interval == 0 || iteration == 1
-        current_lr = iteration <= 500 ? 0.01 : 0.001
-        optimizer_name = iteration <= 500 ? "ADAM" : "BFGS"
-        
-        if save_checkpoint(current_epoch, iteration, l, state.u, 
-                          optimizer_name, current_lr, train_times[end])
-            println("Checkpoint saved at iteration $iteration | Loss = $(round(l, digits=6)) | Time = $(round(train_times[end], digits=2))s")
-        end
+    push!(checkpoints, (iter=iter, loss=loss, mse=mse, r2=r2, optimizer=opt_name))
+    
+    if iter % 50 == 0
+        CSV.write("checkpoints.csv", checkpoints)
+        println("  Iter $iter: Loss=$(round(loss,digits=5)), R²=$(round(r2,digits=3))")
     end
-    
-    # Regular progress update every 100 iterations
-    if iteration % 100 == 0
-        println("Iteration $iteration: Loss = $(round(l, digits=6)) | Time = $(round(train_times[end], digits=2))s")
-    end
-    
-    return false  # Continue training
 end
 
-# Initialize parameters as ComponentArray for optimization
-pinit = ComponentArray(p_nn)
+callback = function(state, l)
+    push!(losses, l)
+    iter = length(losses)
+    opt = iter <= 500 ? "ADAM" : "BFGS"
+    save_checkpoint(iter, l, state.u, opt)
+    return false
+end
 
-# Setup optimization problem
+# Training
+println("\nTraining...")
+pinit = ComponentArray(p_nn)
 optf = Optimization.OptimizationFunction((x, p) -> loss_train(x), Optimization.AutoZygote())
 optprob = Optimization.OptimizationProblem(optf, pinit)
 
-# ============================================
-# PHASE 1: ADAM OPTIMIZATION
-# ============================================
-# ADAM is a gradient-based optimizer that adapts learning rates
-# Good for initial exploration of parameter space
+# Phase 1: ADAM (500 iterations)
+result1 = Optimization.solve(optprob, ADAM(0.01), callback=callback, maxiters=500)
 
-println("\n  Phase 1: ADAM Optimization (Epochs 1-5)")
-println("  " * "─"^40)
-
-adam_iters_per_epoch = 100
-
-for epoch in 1:5
-    current_epoch = epoch
-    println("  Epoch $epoch:")
-    
-    if epoch == 1
-        global result1 = Optimization.solve(optprob, ADAM(0.01), 
-                                           callback=training_callback, 
-                                           maxiters=adam_iters_per_epoch)
-    else
-        # Continue from previous epoch's result
-        optprob_cont = remake(optprob, u0=result1.u)
-        global result1 = Optimization.solve(optprob_cont, ADAM(0.01), 
-                                           callback=training_callback, 
-                                           maxiters=adam_iters_per_epoch)
-    end
-    
-    epoch_loss = losses[end]
-    println("Epoch $epoch complete: Loss = $(round(epoch_loss, digits=6))")
-end
-
-# ============================================
-# PHASE 2: BFGS OPTIMIZATION
-# ============================================
-# BFGS is a quasi-Newton method for fine-tuning
-# Provides precise local optimization
-
-println("\n Phase 2: BFGS Refinement (Epochs 6-7)")
-println("  " * "─"^40)
-
+# Phase 2: BFGS (200 iterations)
 optprob2 = remake(optprob, u0=result1.u)
-bfgs_iters_per_epoch = 100
+result2 = Optimization.solve(optprob2, Optim.BFGS(initial_stepnorm=0.001), 
+                            callback=callback, maxiters=200)
 
-for epoch in 6:7
-    current_epoch = epoch
-    println("Epoch $epoch:")
-    
-    if epoch == 6
-        global result2 = Optimization.solve(optprob2, Optim.BFGS(initial_stepnorm=0.001),
-                                           callback=training_callback, 
-                                           maxiters=bfgs_iters_per_epoch)
-    else
-        optprob_cont = remake(optprob2, u0=result2.u)
-        global result2 = Optimization.solve(optprob_cont, Optim.BFGS(initial_stepnorm=0.001),
-                                           callback=training_callback, 
-                                           maxiters=bfgs_iters_per_epoch)
-    end
-    
-    epoch_loss = losses[end]
-    println("Epoch $epoch complete: Loss = $(round(epoch_loss, digits=6))")
-end
-
-# Extract final trained parameters
 final_params = result2.u
-total_time = time() - start_time
-
-println("\n  Training completed!")
-println("  Total epochs: $current_epoch")
-println("  Total iterations: $(length(losses))")
-println("  Final loss: $(round(losses[end], digits=8))")
-println("  Total time: $(round(total_time, digits=2)) seconds")
+println("✓ Training complete in $(round(time()-start_time, digits=1))s")
 
 # ============================================
-# SECTION 5: MODEL EVALUATION & FORECASTING
+# 4. Evaluation
 # ============================================
-# This section evaluates the trained model using three approaches:
-# 1. Training fit: How well it matches training data
-# 2. Multi-step forecast: Predicting entire test period at once
-# 3. One-step ahead: Conservative prediction using actual data
-
-println("\n5. Evaluating model performance...")
-
-# Get predictions on training data
+# Training predictions
 train_pred = predict_train(final_params)
 
-# Multi-step ahead forecast
-# Uses last training state as initial condition
-# Predicts entire test period in one go
-u_last = train_data[:, end]
+# Multi-step forecast
 prob_test = NeuralODE(dudt_nn, (t_test[1], t_test[end]), Tsit5(), saveat=t_test)
-test_forecast = Array(prob_test(u_last, final_params, st_nn)[1])
+test_forecast = Array(prob_test(train_data[:, end], final_params, st_nn)[1])
 
-# One-step ahead forecast
-# More conservative: uses actual data for each prediction
-function forecast_1step()
-    pred = zeros(6, length(t_test))
-    pred[:, 1] = test_data[:, 1]
-    
-    for i in 2:length(t_test)
-        # Use actual previous state
-        u_curr = test_data[:, i-1]
-        t_span = (t_test[i-1], t_test[i])
-        
-        # Predict just one step ahead
-        prob_1s = NeuralODE(dudt_nn, t_span, Tsit5(), saveat=[t_test[i]])
-        pred[:, i] = Array(prob_1s(u_curr, final_params, st_nn)[1])[:, end]
-    end
-    return pred
+# One-step forecast
+test_1step = zeros(6, length(t_test))
+test_1step[:, 1] = test_data[:, 1]
+for i in 2:length(t_test)
+    prob_1s = NeuralODE(dudt_nn, (t_test[i-1], t_test[i]), Tsit5(), saveat=[t_test[i]])
+    test_1step[:, i] = Array(prob_1s(test_data[:, i-1], final_params, st_nn)[1])[:, end]
 end
 
-test_1step = forecast_1step()
+# Metrics
+calc_r2 = (true_d, pred_d) -> 1 - sum(abs2, true_d .- pred_d) / sum(abs2, true_d .- mean(true_d))
+
+println("\nResults:")
+println("  Train R²: $(round(calc_r2(train_data, train_pred), digits=4))")
+println("  Test R² (multi): $(round(calc_r2(test_data, test_forecast), digits=4))")
+println("  Test R² (1-step): $(round(calc_r2(test_data, test_1step), digits=4))")
 
 # ============================================
-# SECTION 6: PERFORMANCE METRICS CALCULATION
+# 5. Save Results
 # ============================================
-# Calculate comprehensive metrics for all prediction methods
-
-println("\n6. Computing final performance metrics...")
-
-# Calculate metrics for each prediction type
-train_mse, train_mae, train_r2 = calc_metrics(train_data, train_pred)
-test_mse_multi, test_mae_multi, test_r2_multi = calc_metrics(test_data, test_forecast)
-test_mse_1step, test_mae_1step, test_r2_1step = calc_metrics(test_data, test_1step)
-
-# Display performance summary
-println("\nPerformance Summary:")
-println("─"^40)
-println("Training Set:")
-println("  MSE: $(round(train_mse, digits=6))")
-println("  MAE: $(round(train_mae, digits=6))")
-println("  R²:  $(round(train_r2, digits=4))")
-println("\nTest Set (Multi-step):")
-println("  MSE: $(round(test_mse_multi, digits=6))")
-println("  MAE: $(round(test_mae_multi, digits=6))")
-println("  R²:  $(round(test_r2_multi, digits=4))")
-println("\nTest Set (1-step):")
-println("  MSE: $(round(test_mse_1step, digits=6))")
-println("  MAE: $(round(test_mae_1step, digits=6))")
-println("  R²:  $(round(test_r2_1step, digits=4))")
-
-# ============================================
-# SECTION 7: SAVE RESULTS AND CHECKPOINTS
-# ============================================
-# Save all results to CSV files for later analysis
-
-println("\n7. Saving final checkpoint summary...")
-
-# Create comprehensive summary
-final_checkpoint_df = DataFrame(
-    metric = String[],
-    value = Float64[]
-)
-
-# Add all relevant metrics
-push!(final_checkpoint_df, ("final_epoch", Float64(current_epoch)))
-push!(final_checkpoint_df, ("total_iterations", Float64(length(losses))))
-push!(final_checkpoint_df, ("final_loss", losses[end]))
-push!(final_checkpoint_df, ("min_loss", minimum(losses)))
-push!(final_checkpoint_df, ("min_loss_iteration", Float64(argmin(losses))))
-push!(final_checkpoint_df, ("train_mse", train_mse))
-push!(final_checkpoint_df, ("train_mae", train_mae))
-push!(final_checkpoint_df, ("train_r2", train_r2))
-push!(final_checkpoint_df, ("test_mse_multi", test_mse_multi))
-push!(final_checkpoint_df, ("test_mae_multi", test_mae_multi))
-push!(final_checkpoint_df, ("test_r2_multi", test_r2_multi))
-push!(final_checkpoint_df, ("test_mse_1step", test_mse_1step))
-push!(final_checkpoint_df, ("test_mae_1step", test_mae_1step))
-push!(final_checkpoint_df, ("test_r2_1step", test_r2_1step))
-push!(final_checkpoint_df, ("training_time_seconds", total_time))
-push!(final_checkpoint_df, ("training_time_minutes", total_time/60))
-push!(final_checkpoint_df, ("n_train_points", Float64(n_train)))
-push!(final_checkpoint_df, ("n_test_points", Float64(length(t_test))))
-
-CSV.write("final_checkpoint.csv", final_checkpoint_df)
-println("  Saved: final_checkpoint.csv")
-
-# Save complete predictions for analysis
+# Save predictions
 predictions_df = DataFrame(
     time = vcat(t_train, t_test),
-    S_true = ode_data[1, :],
-    I_true = ode_data[2, :],
-    Q_true = ode_data[3, :],
-    R_true = ode_data[4, :],
-    D_true = ode_data[5, :],
-    V_true = ode_data[6, :],
+    S_true = ode_data[1, :], I_true = ode_data[2, :], Q_true = ode_data[3, :],
+    R_true = ode_data[4, :], D_true = ode_data[5, :], V_true = ode_data[6, :],
     S_pred = vcat(train_pred[1, :], test_forecast[1, :]),
     I_pred = vcat(train_pred[2, :], test_forecast[2, :]),
     Q_pred = vcat(train_pred[3, :], test_forecast[3, :]),
@@ -872,114 +545,46 @@ predictions_df = DataFrame(
     V_pred = vcat(train_pred[6, :], test_forecast[6, :]),
     dataset = vcat(fill("train", n_train), fill("test", length(t_test)))
 )
-
 CSV.write("predictions.csv", predictions_df)
-println("  Saved: predictions.csv")
+
+# Save summary
+summary = DataFrame(
+    metric = ["train_r2", "test_r2_multi", "test_r2_1step", "final_loss", 
+              "best_loss", "iterations", "time_seconds"],
+    value = [calc_r2(train_data, train_pred), calc_r2(test_data, test_forecast),
+             calc_r2(test_data, test_1step), losses[end], minimum(losses),
+             length(losses), time()-start_time]
+)
+CSV.write("summary.csv", summary)
 
 # ============================================
-# SECTION 8: VISUALIZATION
+# 6. Visualization
 # ============================================
-# Create comprehensive visualizations of results
-
-println("\n8. Creating visualizations...")
-
-# ---- Plot 1: Compartment Dynamics ----
-# 6-panel plot showing all compartments
-plt_results = plot(layout=(3,2), size=(1200, 900), dpi=100)
-compartment_names = ["Susceptible (S)", "Infected (I)", "Quarantined (Q)", 
-                    "Recovered (R)", "Deaths (D)", "Vaccinated (V)"]
+# Plot 1: Results
+plt = plot(layout=(3,2), size=(1000, 750))
+names = ["S", "I", "Q", "R", "D", "V"]
 colors = [:blue, :red, :orange, :green, :purple, :brown]
 
 for i in 1:6
-    # Ground truth in black
-    plot!(plt_results[i], t, ode_data[i,:], 
-          label="Ground Truth", lw=3, color=:black, alpha=0.7)
-    
-    # Training fit
-    plot!(plt_results[i], t_train, train_pred[i,:], 
-          label="Neural ODE (Train)", lw=2, color=colors[i])
-    
-    # Multi-step forecast (dashed)
-    plot!(plt_results[i], t_test, test_forecast[i,:], 
-          label="Multi-step Forecast", lw=2, color=colors[i], ls=:dash)
-    
-    # 1-step forecast (dotted)
-    plot!(plt_results[i], t_test, test_1step[i,:], 
-          label="1-step Forecast", lw=2, color=colors[i], ls=:dot, alpha=0.7)
-    
-    # Train/test split line
-    vline!(plt_results[i], [t_train[end]], color=:gray, ls=:dash, 
-           alpha=0.5, label="Train/Test Split", lw=1)
-    
-    # Formatting
-    title!(plt_results[i], compartment_names[i], titlefontsize=10)
-    xlabel!(plt_results[i], "Time (days)", guidefontsize=8)
-    ylabel!(plt_results[i], "Population", guidefontsize=8)
-    
-    # Legend only on first subplot
-    if i == 1
-        plot!(plt_results[i], legend=:topright, legendfontsize=6)
-    else
-        plot!(plt_results[i], legend=false)
-    end
-    
-    plot!(plt_results[i], grid=true, gridalpha=0.3, minorgrid=true, minorgridalpha=0.1)
+    plot!(plt[i], t, ode_data[i,:], label="Truth", lw=2.5, color=:black)
+    plot!(plt[i], t_train, train_pred[i,:], label="Train", lw=2, color=colors[i])
+    plot!(plt[i], t_test, test_forecast[i,:], label="Forecast", lw=2, 
+          color=colors[i], ls=:dash)
+    vline!(plt[i], [t_train[end]], color=:gray, ls=:dash, alpha=0.5, label=false)
+    title!(plt[i], names[i])
+    plot!(plt[i], legend=(i==1 ? :best : false))
 end
+savefig(plt, "results.png")
 
-# Add title with key metrics
-best_loss_iter = argmin(losses)
-plot!(plt_results, plot_title="Neural ODE: SIQRDV Model | Final Loss: $(round(losses[end], digits=6)) | Best Loss: $(round(minimum(losses), digits=6)) @ Iter $best_loss_iter", 
-      plot_titlefontsize=12)
+# Plot 2: Loss
+plt_loss = plot(losses, xlabel="Iteration", ylabel="Loss", 
+                title="Training ($(length(losses)) iterations)", 
+                lw=2, yscale=:log10, label="Loss")
+vline!([500], color=:red, ls=:dash, label="ADAM→BFGS")
+savefig(plt_loss, "loss.png")
 
-savefig(plt_results, "results.png")
-println("  Saved: results.png")
+println("\n✓ Saved: predictions.csv, summary.csv, checkpoints.csv, results.png, loss.png")
+println("="^60)
+println("Completed: $(Dates.now())")
+- Console output showing simulation progress and final statistics
 
-# ---- Plot 2: Training Loss Curve ----
-# Shows convergence and training progress
-plt_loss = plot(size=(1000, 600), dpi=100)
-
-# Main loss curve (log scale)
-plot!(plt_loss, 1:length(losses), losses, 
-      label="Training Loss", lw=2, color=:blue, yscale=:log10)
-
-# Mark checkpoint saves
-checkpoint_iters = checkpoint_interval:checkpoint_interval:length(losses)
-checkpoint_losses = [losses[min(i, length(losses))] for i in checkpoint_iters]
-scatter!(plt_loss, checkpoint_iters, checkpoint_losses, 
-         label="Checkpoints", color=:red, markersize=4, alpha=0.7)
-
-# Mark epoch boundaries
-epoch_boundaries = [100, 200, 300, 400, 500, 600]
-for (i, boundary) in enumerate(epoch_boundaries)
-    if boundary <= length(losses)
-        vline!(plt_loss, [boundary], color=:gray, ls=:dash, alpha=0.3, 
-               label= i == 1 ? "Epoch Boundaries" : false, lw=1)
-        annotate!(plt_loss, boundary, minimum(losses) * 1.5, 
-                 text("Epoch $(i+1)", 8, :gray, rotation=90))
-    end
-end
-
-# Mark optimizer transition
-adam_end = 500
-vline!(plt_loss, [adam_end], color=:red, ls=:dash, alpha=0.5, 
-       label="ADAM → BFGS", lw=2)
-
-# Add smoothed trend
-if length(losses) > 20
-    window = 20
-    smoothed = [mean(losses[max(1,i-window):min(length(losses),i+window)]) 
-                for i in 1:length(losses)]
-    plot!(plt_loss, 1:length(losses), smoothed, 
-          label="Smoothed (window=$window)", lw=2, color=:orange, alpha=0.7)
-end
-
-# Mark best loss point
-best_iter = argmin(losses)
-best_loss = minimum(losses)
-scatter!(plt_loss, [best_iter], [best_loss], 
-         label="Best Loss: $(round(best_loss, digits=6)) @ Iter $best_iter", 
-         color=:green, markersize=8, markershape=:star)
-
-xlabel!(plt_loss, "Iteration")
-ylabel!(plt_loss, "Loss (log scale)")
-title!(plt_loss, "Neural ODE Training Convergence with Checkpoints\n$(length(checkpoints_df.epoch)) Checkpoints Saved | $(current_epoch) Epochs Total
