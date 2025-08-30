@@ -1,4 +1,4 @@
-# QSIRDV Epidemiological Model : Milestone 1 
+# QSIRDV Epidemiological Model : Milestone 1 :  Baseline QSIRDV & Data
 
 ## Executive Summary
 
@@ -194,5 +194,200 @@ custom_scenario = (
 
 - **Computational Requirements**: ~2GB RAM, <1 minute runtime
 - **Numerical Stability**: Guaranteed non-negative populations
+
+## QSIRDV Epidemiological Model : Milestone 2 : Neural ODE for SIQRDV Epidemic Model
+
+A Julia implementation of Neural Ordinary Differential Equations (Neural ODEs) for learning epidemic dynamics using the SIQRDV (Susceptible-Infected-Quarantined-Recovered-Deaths-Vaccinated) compartmental model.
+
+## Overview
+
+This project implements a data-driven approach to learn epidemic dynamics using neural networks embedded within differential equations. The model learns the underlying dynamics from time-series data and can forecast future epidemic trajectories.
+
+## Features
+
+- **SIQRDV Compartmental Model**: Complete implementation with 6 compartments
+- **Neural ODE Architecture**: 3-layer neural network (6→32→32→6)
+- **Two-Phase Training**: ADAM optimizer for global search followed by BFGS for local refinement
+- **Comprehensive Checkpointing**: Automatic saving of model progress at regular intervals
+- **Multiple Forecasting Methods**: Both multi-step and one-step ahead predictions
+- **Automated Visualization**: Generates publication-ready plots automatically
+- **Performance Metrics**: MSE, MAE, and R² score tracking
+
+## Requirements
+
+### Julia Version
+- Julia 1.8 or higher
+
+### Required Packages
+```julia
+Lux
+DiffEqFlux
+DifferentialEquations
+Optimization
+OptimizationOptimJL
+OptimizationOptimisers
+Random
+Plots
+ComponentArrays
+CSV
+DataFrames
+Statistics
+Dates
+```
+
+## Installation
+
+1. Clone or download the repository
+2. Navigate to the project directory
+3. Install required packages:
+
+```julia
+using Pkg
+Pkg.add(["Lux", "DiffEqFlux", "DifferentialEquations", "Optimization", 
+         "OptimizationOptimJL", "OptimizationOptimisers", "ComponentArrays",
+         "CSV", "DataFrames", "Plots"])
+```
+
+## Usage
+
+### Quick Start
+
+Simply run the script from the command line:
+
+```bash
+julia neural_ode_siqrdv.jl
+```
+
+Or from Julia REPL:
+
+```julia
+include("neural_ode_siqrdv.jl")
+```
+
+The script will automatically:
+1. Generate synthetic epidemic data
+2. Train the Neural ODE model
+3. Evaluate performance on test data
+4. Save checkpoints and results
+5. Generate visualization plots
+
+### Expected Runtime
+
+- **Total Training Time**: ~2-5 minutes (depending on hardware)
+- **Epochs**: 7 total (5 ADAM + 2 BFGS)
+- **Iterations**: 700 total
+
+## Model Architecture
+
+### SIQRDV Compartments
+- **S**: Susceptible population
+- **I**: Infected individuals
+- **Q**: Quarantined patients
+- **R**: Recovered individuals
+- **D**: Deaths
+- **V**: Vaccinated population
+
+### Neural Network
+- **Input Layer**: 6 nodes (compartment states)
+- **Hidden Layer 1**: 32 nodes with tanh activation
+- **Hidden Layer 2**: 32 nodes with tanh activation
+- **Output Layer**: 6 nodes (derivative predictions)
+- **Total Parameters**: ~1,350
+
+### Training Strategy
+1. **Phase 1 (Epochs 1-5)**: ADAM optimizer with learning rate 0.01
+2. **Phase 2 (Epochs 6-7)**: BFGS optimizer for fine-tuning
+3. **Loss Function**: Weighted MSE with emphasis on Infected (5x) and Quarantined (2x) compartments
+
+## Output Files
+
+The script generates 6 output files:
+
+### CSV Files
+1. **`training_checkpoints.csv`**: Complete training history with metrics at each checkpoint
+   - Epoch number, iteration, loss, MSE, MAE, R², learning rate, optimizer, timestamp
+
+2. **`best_checkpoint.csv`**: Information about the best performing model
+   - Best epoch, iteration, loss, and performance metrics
+
+3. **`final_checkpoint.csv`**: Summary of final model performance
+   - All final metrics, training time, data statistics
+
+4. **`predictions.csv`**: Complete prediction data
+   - Time points, true values, predicted values for all compartments
+
+### Visualization Files
+5. **`results.png`**: 6-panel plot showing all compartment dynamics
+   - Ground truth vs predictions
+   - Train/test split marker
+   - Multi-step and 1-step forecasts
+
+6. **`loss.png`**: Training convergence plot
+   - Loss curve over iterations
+   - Checkpoint markers
+   - Epoch boundaries
+   - Optimizer transition point
+
+## Performance Metrics
+
+The model evaluates performance using:
+- **Mean Squared Error (MSE)**
+- **Mean Absolute Error (MAE)**
+- **R² Score (Coefficient of Determination)**
+
+Metrics are calculated for:
+- Training set fit
+- Test set multi-step forecast
+- Test set one-step ahead forecast
+
+## Example Results
+
+Typical performance after training:
+- **Training R²**: >0.99
+- **Test R² (1-step)**: >0.95
+- **Test R² (multi-step)**: >0.90
+
+## Customization
+
+### Modifying Hyperparameters
+
+You can adjust key parameters in the script:
+
+```julia
+# Network architecture
+hidden_dim = 32  # Number of hidden neurons
+
+# Training parameters
+adam_epochs = 5  # Number of ADAM epochs
+bfgs_epochs = 2  # Number of BFGS epochs
+adam_lr = 0.01   # ADAM learning rate
+
+# Loss weights for [S, I, Q, R, D, V]
+weights = [1.0, 5.0, 2.0, 1.0, 1.0, 1.0]
+
+# Data split
+n_train = 121  # 75% of 161 points
+```
+
+### Changing Initial Conditions
+
+Modify the initial population distribution:
+
+```julia
+u0 = [990.0, 10.0, 0.0, 0.0, 0.0, 0.0]  # [S, I, Q, R, D, V]
+```
+
+### Adjusting Model Parameters
+
+Change the true parameters for data generation:
+
+```julia
+p_true = [0.3, 0.05, 0.1, 0.08, 0.01, 0.005, 0.02]  # [β, κ, γ, γq, δ, δq, ν]
+```
+
+
+
+
+
 
 
