@@ -1,0 +1,15 @@
+metric,value
+train_mse,23.216560145447602
+train_mae,2.875837208234636
+train_r2,0.9995490781590625
+test_mse_multi,221.9942343816141
+test_mae_multi,7.93511618616867
+test_r2_multi,0.9967183552524878
+test_mse_1step,0.5166042189074238
+test_mae_1step,0.4466429849447456
+test_r2_1step,0.9999923632632791
+total_iterations,545.0
+final_loss,24.52904510498047
+training_time_seconds,329.86021900177
+n_train_points,121.0
+n_test_points,40.0
