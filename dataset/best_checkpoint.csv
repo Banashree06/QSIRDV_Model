@@ -1,0 +1,8 @@
+metric,value
+best_epoch,1.0
+best_iteration,400.0
+best_loss,8.956202801082554
+best_train_mse,8.18622058915117
+best_train_mae,1.9368377580502423
+best_train_r2,0.9998410037647586
+time_to_best,129.36469411849976
