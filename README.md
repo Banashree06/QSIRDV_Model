@@ -439,3 +439,190 @@ graph TD
 - **Documentation**: Inline comments throughout
 - **Reproducibility**: Fixed random seed
 
+#Milestone 3: SIQRDV Epidemiological Model: UDE vs Neural ODE Comparison
+## Overview
+
+This project implements and compares two cutting-edge machine learning approaches for modeling epidemic dynamics using the SIQRDV (Susceptible-Infected-Quarantined-Recovered-Deaths-Vaccinated) compartmental model:
+
+1. **Universal Differential Equations (UDE)** - Physics-informed approach
+2. **Neural Ordinary Differential Equations (Neural ODE)** - Pure data-driven approach
+
+## Model Architecture
+
+### SIQRDV Mathematical Framework
+
+The model tracks six population compartments with the following dynamics:
+
+```
+S → I : Transmission (rate β)
+S → V : Vaccination (rate ν)
+I → Q : Quarantine (rate κ)
+I → R : Recovery from infection (rate γ)
+I → D : Death from infection (rate δ)
+Q → R : Recovery from quarantine (rate γq)
+Q → D : Death from quarantine (rate δq)
+```
+
+**Differential Equations:**
+```julia
+dS/dt = -βSI/N - νS
+dI/dt = βSI/N - (γ + δ + κ)I
+dQ/dt = κI - (γq + δq)Q
+dR/dt = γI + γqQ
+dD/dt = δI + δqQ
+dV/dt = νS
+```
+
+## Methodology
+
+### 1. Data Generation
+- **Time span**: 160 days
+- **Data points**: 1000 high-resolution samples
+- **Initial conditions**: 990 susceptible, 10 infected
+- **Noise**: 1% Gaussian noise added to simulate real-world measurements
+- **Train/Test split**: 70%/30% (700 training, 300 testing points)
+
+### 2. Universal Differential Equations (UDE)
+
+**Approach**: Embeds neural networks within known mathematical structure
+
+**Architecture**:
+- **β network**: 2→12→8→1 (learns transmission rate as function of S,I)
+- **κ network**: 1→8→1 (learns quarantine rate as function of I)
+- **Classical parameters**: γ, γq, δ, δq, ν learned directly
+
+**Philosophy**: Combines domain knowledge with machine learning flexibility
+
+```julia
+# UDE structure
+β = NN_beta(S_norm, I_norm)  # Neural network
+κ = NN_kappa(I_norm)         # Neural network
+# Rest follows SIQRDV equations with learned parameters
+```
+
+### 3. Neural Ordinary Differential Equations
+
+**Approach**: Learns entire dynamics from data without epidemiological assumptions
+
+**Architecture**:
+- **Main network**: 6→24→24→6 (maps state to derivatives)
+- **No constraints**: Pure black-box learning
+
+**Philosophy**: Minimal assumptions, maximum data-driven flexibility
+
+```julia
+# Neural ODE structure
+du/dt = Neural_Network(u)  # Learn everything from data
+```
+
+### 4. Training Strategy
+
+**Two-stage optimization**:
+1. **ADAM optimizer** (500 iterations) - Fast exploration
+2. **BFGS optimizer** (300 iterations) - Precise convergence
+
+**Weighted loss function**: Different compartments have different importance weights based on epidemiological significance
+
+## Implementation Details
+
+### Dependencies
+```julia
+using DifferentialEquations, Optimization, OptimizationOptimJL, OptimizationOptimisers
+using Lux, DiffEqFlux, ComponentArrays, Random, Statistics
+using Plots, SciMLSensitivity, CSV, DataFrames
+```
+
+### Key Features
+- **High-resolution data**: 1000 time points for detailed dynamics
+- **Comprehensive metrics**: 7 different performance measures
+- **Robust evaluation**: Training and testing performance analysis
+- **Visual analysis**: 4 detailed PNG visualizations
+- **Statistical export**: CSV results for further analysis
+
+## Evaluation Metrics
+
+The models are compared using seven comprehensive metrics:
+
+1. **R² Score** - Coefficient of determination (higher = better)
+2. **MSE** - Mean Squared Error (lower = better)  
+3. **RMSE** - Root Mean Squared Error (lower = better)
+4. **MAE** - Mean Absolute Error (lower = better)
+5. **MAPE** - Mean Absolute Percentage Error (lower = better)
+6. **Max Error** - Maximum single prediction error (lower = better)
+7. **NRMSE** - Normalized RMSE percentage (lower = better)
+
+## Output Files
+
+### Visualizations (PNG)
+1. `truth_vs_both_models_comparison_1000pts.png` - Main comparison plot
+2. `training_loss_comparison_1000pts.png` - Training convergence curves
+3. `prediction_error_analysis_1000pts.png` - Error analysis by compartment
+4. `r2_score_comparison_1000pts.png` - Performance comparison by compartment
+
+### Data Export
+- `model_results_1000pts.csv` - Comprehensive numerical results
+
+## Results Analysis
+
+The code automatically determines the winning model based on four criteria:
+1. **Test R² Score** - Generalization accuracy
+2. **Test RMSE** - Prediction precision
+3. **Training Speed** - Computational efficiency
+4. **Generalization Gap** - Overfitting assessment
+
+## Key Research Questions
+
+1. **Physics vs Data**: Does incorporating epidemiological knowledge (UDE) outperform pure data-driven learning (Neural ODE)?
+
+2. **Generalization**: Which approach better extrapolates to unseen time periods?
+
+3. **Interpretability**: Can we understand what the models learned about epidemic mechanisms?
+
+4. **Efficiency**: Which method trains faster and more reliably?
+
+## Usage
+
+```julia
+# Run the complete analysis
+julia siqrdv_1000_analysis.jl
+
+# Expected runtime: 5-15 minutes depending on hardware
+# Outputs: 4 PNG files + 1 CSV file + console results
+```
+
+## Technical Innovations
+
+### UDE Advantages
+- **Domain knowledge integration**: Respects epidemiological principles
+- **Parameter interpretability**: Learned parameters have physical meaning
+- **Structured learning**: Constrains search space with known relationships
+
+### Neural ODE Advantages  
+- **Flexibility**: Can capture any smooth dynamics
+- **No assumptions**: Discovers patterns without bias
+- **Generalization potential**: May find novel epidemic behaviors
+
+## Scientific Impact
+
+This comparison addresses fundamental questions in scientific machine learning:
+- When should we embed domain knowledge vs learn from scratch?
+- How does physics-informed ML perform in epidemiological modeling?
+- What are the trade-offs between interpretability and flexibility?
+
+The 1000-point high-resolution experiment provides robust evidence for evaluating these competing approaches in the critical domain of epidemic modeling.
+
+## Hardware Requirements
+
+- **RAM**: 8GB+ recommended
+- **CPU**: Multi-core processor for optimization
+- **GPU**: Optional, can accelerate neural network training
+- **Storage**: ~100MB for outputs
+
+## Future Extensions
+
+- **Multi-strain dynamics**: Extend to variants and mutations
+- **Spatial modeling**: Add geographic spread components  
+- **Policy optimization**: Learn optimal intervention strategies
+- **Uncertainty quantification**: Bayesian approaches for confidence intervals
+- **Real data validation**: Test on actual epidemic datasets
+
