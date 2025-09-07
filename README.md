@@ -431,15 +431,8 @@ graph TD
 - **DataFrames.jl**: Data organization
 - **CSV.jl**: File I/O
 
-## Code Quality Metrics
+# **Milestone 3: SIQRDV Epidemiological Model: UDE vs Neural ODE Comparison**
 
-- **Lines of Code**: ~500
-- **Functions**: 8 main functions
-- **Modularity**: Clear separation of concerns
-- **Documentation**: Inline comments throughout
-- **Reproducibility**: Fixed random seed
-
-#Milestone 3: SIQRDV Epidemiological Model: UDE vs Neural ODE Comparison
 ## Overview
 
 This project implements and compares two cutting-edge machine learning approaches for modeling epidemic dynamics using the SIQRDV (Susceptible-Infected-Quarantined-Recovered-Deaths-Vaccinated) compartmental model:
@@ -448,6 +441,122 @@ This project implements and compares two cutting-edge machine learning approache
 2. **Neural Ordinary Differential Equations (Neural ODE)** - Pure data-driven approach
 
 ## Model Architecture
+
+### System Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SIQRDV EPIDEMIC MODEL COMPARISON                 │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────┐
+│                        DATA GENERATION                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
+│  │ Ground Truth    │  │   Add 1% Noise  │  │ 1000 Time Points   │  │
+│  │ SIQRDV Solution │─▶│   Simulation    │─▶│   160 Days         │  │
+│  │ [S,I,Q,R,D,V]   │  │                 │  │                     │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────┘  │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────┐
+│                      TRAIN/TEST SPLIT                               │
+│            70% Training (700 pts) │ 30% Testing (300 pts)           │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │     MODEL SELECTION       │
+                    └──────────┬─────────┬──────┘
+                              │         │
+                              │         │
+┌─────────────────────────────▼─┐     ┌─▼─────────────────────────────┐
+│    UNIVERSAL DIFF EQUATIONS   │     │     NEURAL ODE MODEL          │
+│    (Physics-Informed)         │     │     (Data-Driven)             │
+│                               │     │                               │
+│  ┌─────────────────────────┐   │     │  ┌─────────────────────────┐  │
+│  │  β Network: 2→12→8→1    │   │     │  │   Main NN: 6→24→24→6   │  │
+│  │  Input: [S_norm,I_norm] │   │     │  │   Input: [S,I,Q,R,D,V]  │  │
+│  │  Output: Trans. Rate    │   │     │  │   Output: [dS,dI,..]    │  │
+│  └─────────────────────────┘   │     │  └─────────────────────────┘  │
+│                               │     │                               │
+│  ┌─────────────────────────┐   │     │  ┌─────────────────────────┐  │
+│  │  κ Network: 1→8→1       │   │     │  │   Pure Black-Box        │  │
+│  │  Input: [I_norm]        │   │     │  │   Learning              │  │
+│  │  Output: Quar. Rate     │   │     │  │   No Physics Constraints│  │
+│  └─────────────────────────┘   │     │  └─────────────────────────┘  │
+│                               │     │                               │
+│  ┌─────────────────────────┐   │     │                               │
+│  │  Classical Parameters   │   │     │                               │
+│  │  γ, γq, δ, δq, ν       │   │     │                               │
+│  └─────────────────────────┘   │     │                               │
+└─────────────────────────────┬─┘     └─┬─────────────────────────────┘
+                              │         │
+┌─────────────────────────────▼─────────▼─────────────────────────────┐
+│                    TWO-STAGE OPTIMIZATION                           │
+│  ┌─────────────────────────┐   ┌─────────────────────────────────┐  │
+│  │  Stage 1: ADAM (500)    │─▶ │  Stage 2: BFGS (300)            │  │
+│  │  Fast Exploration       │   │  Precise Convergence            │  │
+│  └─────────────────────────┘   └─────────────────────────────────┘  │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────┐
+│                     COMPREHENSIVE EVALUATION                        │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ R² Score │ │ MSE/RMSE │ │   MAE    │ │   MAPE   │ │Max Error │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────┐
+│                         OUTPUT GENERATION                           │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐│
+│  │ Main Plot   │ │ Loss Curves │ │ Error Plot  │ │ R² Comparison   ││
+│  │    (PNG)    │ │    (PNG)    │ │   (PNG)     │ │     (PNG)       ││
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────────┘│
+│                           ┌─────────────────┐                       │
+│                           │ Results (CSV)   │                       │
+│                           └─────────────────┘                       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### SIQRDV Compartmental Model Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     POPULATION DYNAMICS                             │
+│                                                                     │
+│     S ────β────▶ I ────κ────▶ Q                                   │
+│     │           │             │                                   │
+│     │           │             │                                   │
+│     ν           γ            γq                                   │
+│     │           │             │                                   │
+│     ▼           ▼             ▼                                   │
+│     V           R ◀───────────┘                                   │
+│                 ▲                                                │
+│                 │                                                │
+│        ┌────────┴────────┐                                       │
+│        │                 │                                       │
+│        │        ┌────────▼─────────┐                             │
+│        │        │                  │                             │
+│        │        │        D         │                             │
+│        │        │                  │                             │
+│        │        └──────────────────┘                             │
+│        │                 ▲                                       │
+│        │        ┌────────┴────────┐                              │
+│        │        │                 │                              │
+│        └────────┤        δ        │                              │
+│                 │                 │                              │
+│                 └─────────────────┘                              │
+│                           ▲                                       │
+│                          δq                                       │
+│                           │                                       │
+│                           Q                                       │
+│                                                                   │
+│ Legend:                                                           │
+│ S = Susceptible, I = Infected, Q = Quarantined                   │
+│ R = Recovered, D = Deaths, V = Vaccinated                        │
+│ β = transmission, κ = quarantine, γ = recovery                   │
+│ δ = death rates, ν = vaccination                                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ### SIQRDV Mathematical Framework
 
@@ -600,29 +709,4 @@ julia siqrdv_1000_analysis.jl
 ### Neural ODE Advantages  
 - **Flexibility**: Can capture any smooth dynamics
 - **No assumptions**: Discovers patterns without bias
-- **Generalization potential**: May find novel epidemic behaviors
-
-## Scientific Impact
-
-This comparison addresses fundamental questions in scientific machine learning:
-- When should we embed domain knowledge vs learn from scratch?
-- How does physics-informed ML perform in epidemiological modeling?
-- What are the trade-offs between interpretability and flexibility?
-
-The 1000-point high-resolution experiment provides robust evidence for evaluating these competing approaches in the critical domain of epidemic modeling.
-
-## Hardware Requirements
-
-- **RAM**: 8GB+ recommended
-- **CPU**: Multi-core processor for optimization
-- **GPU**: Optional, can accelerate neural network training
-- **Storage**: ~100MB for outputs
-
-## Future Extensions
-
-- **Multi-strain dynamics**: Extend to variants and mutations
-- **Spatial modeling**: Add geographic spread components  
-- **Policy optimization**: Learn optimal intervention strategies
-- **Uncertainty quantification**: Bayesian approaches for confidence intervals
-- **Real data validation**: Test on actual epidemic datasets
 
