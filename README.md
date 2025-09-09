@@ -1038,7 +1038,9 @@ include("unified_comparison.jl")
 4. UDE: 446.87 seconds
 
 #### Accuracy Rankings (Typical R²)
-1. VB/UDE: 0.90-0.95
-2. SMC-ABC: 0.85-0.93
-3. Neural ODE: 0.80-0.92
+####TEST PERFORMANCE RANKING (R²):
+  1. UDE: 1.0
+  2. VB: 1.0
+  3. SMC: 1.0
+  4. NODE: 0.9878
 
