@@ -1033,9 +1033,9 @@ include("unified_comparison.jl")
 
 #### Speed Rankings (Expected)
 1. SMC-ABC: 0.45 seconds
-2. VB: 0.38 seconds 
-3. Neural ODE: 22.64 seconds
-4. UDE: 446.87 seconds
+2. VB: 0.6 seconds 
+3. Neural ODE: 85.64 seconds
+4. UDE: 298 seconds
 
 #### TEST PERFORMANCE RANKING (R²):
   1. UDE: 1.0
