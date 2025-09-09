@@ -1037,8 +1037,7 @@ include("unified_comparison.jl")
 3. Neural ODE: 22.64 seconds
 4. UDE: 446.87 seconds
 
-#### Accuracy Rankings (Typical R²)
-####TEST PERFORMANCE RANKING (R²):
+#### TEST PERFORMANCE RANKING (R²):
   1. UDE: 1.0
   2. VB: 1.0
   3. SMC: 1.0
